@@ -10,11 +10,15 @@ class E2E(nn.Module):
     def __init__(self, n_blocks, n_gru, kernel_size, en_de_layers=5, inter_layers=4, in_channels=1,
                  en_out_channels=16):
         super(E2E, self).__init__()
-        self.unet = DeepUnet(in_channels, en_out_channels, base_channels=64,
-            num_hyperedges=16,
+        self.unet = DeepUnet(
+            in_channels=in_channels, 
+            en_out_channels=en_out_channels,
+            base_channels=64,
             hyperace_k=2,
             hyperace_l=1,
-            num_heads=8)
+            num_hyperedges=16,
+            num_heads=8
+        )
         self.cnn = nn.Conv2d(en_out_channels, 3, (3, 3), padding=(1, 1))
         if n_gru:
             self.fc = nn.Sequential(

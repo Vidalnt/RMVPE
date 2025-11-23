@@ -66,11 +66,12 @@ class DS_C3k2(nn.Module):
         return self.cv2(x_)
 
 class AdaptiveHyperedgeGeneration(nn.Module):
-    def __init__(self, in_channels, num_hyperedges, num_heads=8):
+    def __init__(self, in_channels, num_hyperedges, num_heads):
         super().__init__()
         self.num_hyperedges = num_hyperedges
         self.num_heads = num_heads
-        self.head_dim = in_channels // num_heads
+        self.head_dim = max(1, in_channels // num_heads)
+
         self.global_proto = nn.Parameter(torch.randn(num_hyperedges, in_channels))
         self.context_mapper = nn.Linear(2 * in_channels, num_hyperedges * in_channels, bias=False)
         self.query_proj = nn.Linear(in_channels, in_channels, bias=False)
@@ -84,9 +85,11 @@ class AdaptiveHyperedgeGeneration(nn.Module):
 
         delta_P = self.context_mapper(f_ctx).view(B, self.num_hyperedges, C)
         P = self.global_proto.unsqueeze(0) + delta_P
+
         z = self.query_proj(x)
         z = z.view(B, N, self.num_heads, self.head_dim).permute(0, 2, 1, 3) 
         P = P.view(B, self.num_hyperedges, self.num_heads, self.head_dim).permute(0, 2, 3, 1)
+
         sim = (z @ P) * self.scale
         s_bar = sim.mean(dim=1)
         A = F.softmax(s_bar.permute(0, 2, 1), dim=-1)
@@ -107,7 +110,7 @@ class HypergraphConvolution(nn.Module):
         return x + x_out
 
 class AdaptiveHypergraphComputation(nn.Module):
-    def __init__(self, in_channels, out_channels, num_hyperedges=8, num_heads=8):
+    def __init__(self, in_channels, out_channels, num_hyperedges, num_heads):
         super().__init__()
         self.adaptive_hyperedge_gen = AdaptiveHyperedgeGeneration(in_channels, num_hyperedges, num_heads)
         self.hypergraph_conv = HypergraphConvolution(in_channels, out_channels)
@@ -121,7 +124,7 @@ class AdaptiveHypergraphComputation(nn.Module):
         return x_out
 
 class C3AH(nn.Module):
-    def __init__(self, c1, c2, num_hyperedges=8, num_heads=4, e=0.5):
+    def __init__(self, c1, c2, num_hyperedges, num_heads, e=0.5):
         super().__init__()
         c_ = int(c1 * e)
         self.cv1 = Conv(c1, c_, 1, 1)
@@ -136,11 +139,11 @@ class C3AH(nn.Module):
 
 class HyperACE(nn.Module):
     def __init__(self, in_channels: List[int], out_channels: int, 
-                 num_hyperedges=8, num_heads=4, k=1, l=1, c_h=0.5, c_l=0.25):
+                 num_hyperedges=16, num_heads=8, k=2, l=1, c_h=0.5, c_l=0.25):
         super().__init__()
-        c2, c3, c4, c5 = in_channels 
-        c_mid = c4 
 
+        c2, c3, c4, c5 = in_channels 
+        c_mid = c4
         self.fuse_conv = Conv(c2 + c3 + c4 + c5, c_mid, 1, 1) 
 
         self.c_h = int(c_mid * c_h)
@@ -148,24 +151,24 @@ class HyperACE(nn.Module):
         self.c_s = c_mid - self.c_h - self.c_l
         
         self.high_order_branch = nn.ModuleList(
-            [C3AH(self.c_h, self.c_h, num_hyperedges, num_heads, e=1.0) for _ in range(k)]
+            [C3AH(self.c_h, self.c_h, num_hyperedges=num_hyperedges, num_heads=num_heads, e=1.0) for _ in range(k)]
         )
         self.high_order_fuse = Conv(self.c_h * k, self.c_h, 1, 1)
+        
         self.low_order_branch = nn.Sequential(
             *[DS_C3k(self.c_l, self.c_l, n=1, k=3, e=1.0) for _ in range(l)]
         )
+        
         self.final_fuse = Conv(self.c_h + self.c_l + self.c_s, out_channels, 1, 1)
 
     def forward(self, x: List[torch.Tensor]) -> torch.Tensor:
         B2, B3, B4, B5 = x 
         B, _, H4, W4 = B4.shape
-
         B2_resized = F.interpolate(B2, size=(H4, W4), mode='bilinear', align_corners=False) 
         B3_resized = F.interpolate(B3, size=(H4, W4), mode='bilinear', align_corners=False)
         B5_resized = F.interpolate(B5, size=(H4, W4), mode='bilinear', align_corners=False)
 
         x_b = self.fuse_conv(torch.cat((B2_resized, B3_resized, B4, B5_resized), dim=1)) 
-
         x_h, x_l, x_s = torch.split(x_b, [self.c_h, self.c_l, self.c_s], dim=1)
 
         x_h_outs = [m(x_h) for m in self.high_order_branch]
