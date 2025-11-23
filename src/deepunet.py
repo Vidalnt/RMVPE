@@ -1,189 +1,133 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from .constants import N_MELS
+from .yolov13_modules import DSConv, DS_C3k2, HyperACE, GatedFusion, Conv
 
-
-class ConvBlockRes(nn.Module):
-    def __init__(self, in_channels, out_channels, momentum=0.01):
-        super(ConvBlockRes, self).__init__()
-        self.conv = nn.Sequential(
-            nn.Conv2d(in_channels=in_channels,
-                      out_channels=out_channels,
-                      kernel_size=(3, 3),
-                      stride=(1, 1),
-                      padding=(1, 1),
-                      bias=False),
-            nn.BatchNorm2d(out_channels, momentum=momentum),
-            nn.ReLU(),
-
-            nn.Conv2d(in_channels=out_channels,
-                      out_channels=out_channels,
-                      kernel_size=(3, 3),
-                      stride=(1, 1),
-                      padding=(1, 1),
-                      bias=False),
-            nn.BatchNorm2d(out_channels, momentum=momentum),
-            nn.ReLU(),
+class YOLO13Encoder(nn.Module):
+    def __init__(self, in_channels, base_channels=32):
+        super().__init__()
+        self.stem = DSConv(in_channels, base_channels, k=3, s=1) 
+        
+        self.p2 = nn.Sequential(
+            DSConv(base_channels, base_channels*2, k=3, s=(2, 2)), 
+            DS_C3k2(base_channels*2, base_channels*2, n=1)
         )
-        if in_channels != out_channels:
-            self.shortcut = nn.Conv2d(in_channels, out_channels, (1, 1))
-            self.is_shortcut = True
-        else:
-            self.is_shortcut = False
-
-    def forward(self, x):
-        if self.is_shortcut:
-            return self.conv(x) + self.shortcut(x)
-        else:
-            return self.conv(x) + x
-
-
-class ResEncoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, n_blocks=1, momentum=0.01):
-        super(ResEncoderBlock, self).__init__()
-        self.n_blocks = n_blocks
-        self.conv = nn.ModuleList()
-        self.conv.append(ConvBlockRes(in_channels, out_channels, momentum))
-        for i in range(n_blocks - 1):
-            self.conv.append(ConvBlockRes(out_channels, out_channels, momentum))
-        self.kernel_size = kernel_size
-        if self.kernel_size is not None:
-            self.pool = nn.AvgPool2d(kernel_size=kernel_size)
-
-    def forward(self, x):
-        for i in range(self.n_blocks):
-            x = self.conv[i](x)
-        if self.kernel_size is not None:
-            return x, self.pool(x)
-        else:
-            return x
-
-
-class ResDecoderBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride, n_blocks=1, momentum=0.01):
-        super(ResDecoderBlock, self).__init__()
-        out_padding = (0, 1) if stride == (1, 2) else (1, 1)
-        self.n_blocks = n_blocks
-        self.conv1 = nn.Sequential(
-            nn.ConvTranspose2d(in_channels=in_channels,
-                               out_channels=out_channels,
-                               kernel_size=(3, 3),
-                               stride=stride,
-                               padding=(1, 1),
-                               output_padding=out_padding,
-                               bias=False),
-            nn.BatchNorm2d(out_channels, momentum=momentum),
-            nn.ReLU(),
+        
+        self.p3 = nn.Sequential(
+            DSConv(base_channels*2, base_channels*4, k=3, s=(2, 2)), 
+            DS_C3k2(base_channels*4, base_channels*4, n=2)
         )
-        self.conv2 = nn.ModuleList()
-        self.conv2.append(ConvBlockRes(out_channels * 2, out_channels, momentum))
-        for i in range(n_blocks-1):
-            self.conv2.append(ConvBlockRes(out_channels, out_channels, momentum))
-
-    def forward(self, x, concat_tensor):
-        x = self.conv1(x)
-        x = torch.cat((x, concat_tensor), dim=1)
-        for i in range(self.n_blocks):
-            x = self.conv2[i](x)
-        return x
-
-
-class Encoder(nn.Module):
-    def __init__(self, in_channels, in_size, n_encoders, kernel_size, n_blocks, out_channels=16, momentum=0.01):
-        super(Encoder, self).__init__()
-        self.n_encoders = n_encoders
-        self.bn = nn.BatchNorm2d(in_channels, momentum=momentum)
-        self.layers = nn.ModuleList()
-        self.latent_channels = []
-        for i in range(self.n_encoders):
-            self.layers.append(ResEncoderBlock(in_channels, out_channels, kernel_size, n_blocks, momentum=momentum))
-            self.latent_channels.append([out_channels, in_size])
-            in_channels = out_channels
-            out_channels *= 2
-            in_size //= 2
-        self.out_size = in_size
-        self.out_channel = out_channels
+        
+        self.p4 = nn.Sequential(
+            DSConv(base_channels*4, base_channels*8, k=3, s=(2, 2)), 
+            DS_C3k2(base_channels*8, base_channels*8, n=2)
+        )
+        
+        self.p5 = nn.Sequential(
+            DSConv(base_channels*8, base_channels*16, k=3, s=(2, 2)), 
+            DS_C3k2(base_channels*16, base_channels*16, n=1)
+        )
+        
+        self.out_channels = [base_channels*2, base_channels*4, base_channels*8, base_channels*16]
 
     def forward(self, x):
-        concat_tensors = []
-        x = self.bn(x)
-        for i in range(self.n_encoders):
-            _, x = self.layers[i](x)
-            concat_tensors.append(_)
-        return x, concat_tensors
+        x = self.stem(x)
+        p2 = self.p2(x)
+        p3 = self.p3(p2)
+        p4 = self.p4(p3)
+        p5 = self.p5(p4)
+        return [p2, p3, p4, p5]
 
+class YOLO13FullPADDecoder(nn.Module):
+    def __init__(self, encoder_channels, hyperace_out_c, out_channels_final):
+        super().__init__()
+        c_p2, c_p3, c_p4, c_p5 = encoder_channels
+        
+        c_d5, c_d4, c_d3, c_d2 = c_p5, c_p4, c_p3, c_p2
+        
+        self.h_to_d5 = Conv(hyperace_out_c, c_d5, 1, 1)
+        self.h_to_d4 = Conv(hyperace_out_c, c_d4, 1, 1)
+        self.h_to_d3 = Conv(hyperace_out_c, c_d3, 1, 1)
+        self.h_to_d2 = Conv(hyperace_out_c, c_d2, 1, 1)
 
-class Intermediate(nn.Module):
-    def __init__(self, in_channels, out_channels, n_inters, n_blocks, momentum=0.01):
-        super(Intermediate, self).__init__()
-        self.n_inters = n_inters
-        self.layers = nn.ModuleList()
-        self.layers.append(ResEncoderBlock(in_channels, out_channels, None, n_blocks, momentum))
-        for i in range(self.n_inters-1):
-            self.layers.append(ResEncoderBlock(out_channels, out_channels, None, n_blocks, momentum))
+        self.fusion_d5 = GatedFusion(c_d5)
+        self.fusion_d4 = GatedFusion(c_d4)
+        self.fusion_d3 = GatedFusion(c_d3)
+        self.fusion_d2 = GatedFusion(c_d2)
 
-    def forward(self, x):
-        for i in range(self.n_inters):
-            x = self.layers[i](x)
-        return x
+        self.skip_p5 = Conv(c_p5, c_d5, 1, 1)
+        self.skip_p4 = Conv(c_p4, c_d4, 1, 1)
+        self.skip_p3 = Conv(c_p3, c_d3, 1, 1)
+        self.skip_p2 = Conv(c_p2, c_d2, 1, 1)
 
+        self.up_d5 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        self.proc_d5 = DS_C3k2(c_d5, c_d4, n=1)
+        
+        self.up_d4 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        self.proc_d4 = DS_C3k2(c_d4, c_d3, n=1)
 
-class Decoder(nn.Module):
-    def __init__(self, in_channels, n_decoders, stride, n_blocks, momentum=0.01):
-        super(Decoder, self).__init__()
-        self.layers = nn.ModuleList()
-        self.n_decoders = n_decoders
-        for i in range(self.n_decoders):
-            out_channels = in_channels // 2
-            self.layers.append(ResDecoderBlock(in_channels, out_channels, stride, n_blocks, momentum))
-            in_channels = out_channels
+        self.up_d3 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+        self.proc_d3 = DS_C3k2(c_d3, c_d2, n=1)
+        
+        self.final_d2 = DS_C3k2(c_d2, c_d2, n=1)
+        self.final_conv = Conv(c_d2, out_channels_final, 1, 1)
 
-    def forward(self, x, concat_tensors):
-        for i in range(self.n_decoders):
-            x = self.layers[i](x, concat_tensors[-1-i])
-        return x
+    def forward(self, enc_feats, h_ace):
+        p2, p3, p4, p5 = enc_feats
+        
+        d5 = self.skip_p5(p5)
+        h_d5 = self.h_to_d5(F.interpolate(h_ace, size=d5.shape[2:], mode='bilinear', align_corners=False))
+        d5 = self.fusion_d5(d5, h_d5)
+        
+        x = self.proc_d5(self.up_d5(d5))
+        d4 = x + self.skip_p4(p4) 
+        h_d4 = self.h_to_d4(F.interpolate(h_ace, size=d4.shape[2:], mode='bilinear', align_corners=False))
+        d4 = self.fusion_d4(d4, h_d4)
+        
+        x = self.proc_d4(self.up_d4(d4))
+        d3 = x + self.skip_p3(p3)
+        h_d3 = self.h_to_d3(F.interpolate(h_ace, size=d3.shape[2:], mode='bilinear', align_corners=False))
+        d3 = self.fusion_d3(d3, h_d3)
 
+        x = self.proc_d3(self.up_d3(d3))
+        d2 = x + self.skip_p2(p2)
+        h_d2 = self.h_to_d2(F.interpolate(h_ace, size=d2.shape[2:], mode='bilinear', align_corners=False))
+        d2 = self.fusion_d2(d2, h_d2)
 
-class TimbreFilter(nn.Module):
-    def __init__(self, latent_rep_channels):
-        super(TimbreFilter, self).__init__()
-        self.layers = nn.ModuleList()
-        for latent_rep in latent_rep_channels:
-            self.layers.append(ConvBlockRes(latent_rep[0], latent_rep[0]))
-
-    def forward(self, x_tensors):
-        out_tensors = []
-        for i, layer in enumerate(self.layers):
-            out_tensors.append(layer(x_tensors[i]))
-        return out_tensors
-
+        d2 = self.final_d2(d2)
+        return self.final_conv(d2)
 
 class DeepUnet(nn.Module):
-    def __init__(self, kernel_size, n_blocks, en_de_layers=5, inter_layers=4, in_channels=1, en_out_channels=16):
-        super(DeepUnet, self).__init__()
-        self.encoder = Encoder(in_channels, N_MELS, en_de_layers, kernel_size, n_blocks, en_out_channels)
-        self.intermediate = Intermediate(self.encoder.out_channel // 2, self.encoder.out_channel, inter_layers, n_blocks)
-        self.tf = TimbreFilter(self.encoder.latent_channels)
-        self.decoder = Decoder(self.encoder.out_channel, en_de_layers, kernel_size, n_blocks)
+    def __init__(self, in_channels=1, en_out_channels=16, base_channels=64, hyperace_k=2, hyperace_l=1, num_heads=8):
+        super().__init__()
+        
+        self.encoder = YOLO13Encoder(in_channels, base_channels)
+        enc_ch = self.encoder.out_channels
+        
+        self.hyperace = HyperACE(
+            in_channels=enc_ch,
+            out_channels=enc_ch[-1],
+            num_hyperedges=16, 
+            num_heads=num_heads,
+            k=hyperace_k, l=hyperace_l
+        )
+        
+        self.decoder = YOLO13FullPADDecoder(
+            encoder_channels=enc_ch,
+            hyperace_out_c=enc_ch[-1],
+            out_channels_final=en_out_channels
+        )
 
     def forward(self, x):
-        x, concat_tensors = self.encoder(x)
-        x = self.intermediate(x)
-        concat_tensors = self.tf(concat_tensors)
-        x = self.decoder(x, concat_tensors)
-        return x
-
-      
-class DeepUnet0(nn.Module):
-    def __init__(self, kernel_size, n_blocks, en_de_layers=5, inter_layers=4, in_channels=1, en_out_channels=16):
-        super(DeepUnet0, self).__init__()
-        self.encoder = Encoder(in_channels, N_MELS, en_de_layers, kernel_size, n_blocks, en_out_channels)
-        self.intermediate = Intermediate(self.encoder.out_channel // 2, self.encoder.out_channel, inter_layers, n_blocks)
-        self.tf = TimbreFilter(self.encoder.latent_channels)
-        self.decoder = Decoder(self.encoder.out_channel, en_de_layers, kernel_size, n_blocks)
-
-    def forward(self, x):
-        x, concat_tensors = self.encoder(x)
-        x = self.intermediate(x)
-        x = self.decoder(x, concat_tensors)
-        return x
+        original_size = x.shape[2:]
+        
+        features = self.encoder(x)
+        
+        h_ace = self.hyperace(features)
+        
+        x_dec = self.decoder(features, h_ace)
+        
+        x_out = F.interpolate(x_dec, size=original_size, mode='bilinear', align_corners=False)
+        
+        return x_out
