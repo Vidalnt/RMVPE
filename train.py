@@ -34,7 +34,13 @@ def train():
     learning_rate_decay_steps = 2000
     warmup_steps = int(len(data_loader) * 3)
     learning_rate_decay_rate = 0.98
-    resume_iteration = None
+
+    resume_path = os.path.join(logdir, 'model_latest.pt') if only_latest else None
+    if only_latest and os.path.exists(resume_path):
+        should_resume = True
+    else:
+        should_resume = False
+        resume_iteration = 0 
 
     os.makedirs(logdir, exist_ok=True)
     writer = SummaryWriter(logdir)
@@ -43,16 +49,16 @@ def train():
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     scheduler = StepLR(optimizer, step_size=learning_rate_decay_steps, gamma=learning_rate_decay_rate)
 
-    if resume_iteration is None:
-        resume_iteration = 0
-    else:
-        model_path = os.path.join(logdir, f'model_{resume_iteration}.pt')
-        ckpt = torch.load(model_path, map_location=torch.device(device))
+    if should_resume:
+        ckpt = torch.load(resume_path, map_location=torch.device(device))
         model.load_state_dict(ckpt['model'])
+        
         if 'optimizer' in ckpt:
             optimizer.load_state_dict(ckpt['optimizer'])
         if 'scheduler' in ckpt:
             scheduler.load_state_dict(ckpt['scheduler'])
+        
+        resume_iteration = ckpt.get('iteration', 0) 
 
     summary(model)
 
@@ -105,6 +111,7 @@ def train():
                 
                 model_filename = 'model_latest.pt' if only_latest else f'model_{i}.pt'
                 torch.save({
+                    'iteration': i,
                     'model': model.state_dict(),
                     'optimizer': optimizer.state_dict(),
                     'scheduler': scheduler.state_dict()
