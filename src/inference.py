@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 from torchaudio.transforms import Resample
 from .constants import *
-from .model import E2E0, E2E
+from .model import E2E0
 from .spec import MelSpectrogram 
 from .utils import to_local_average_f0, to_viterbi_f0
 
