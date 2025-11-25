@@ -75,7 +75,7 @@ def process_dataset(args):
             f0_sequence = extract_f0_parselmouth(audio_mono, args.sr, 160, args.f0_min, args.f0_max)
             f0_sequence[f0_sequence < 0] = 0.0
             
-            np.savetxt(os.path.join(split_out_dir, f"{base_filename}.pv"),
+            np.savetxt(os.path.join(split_out_dir, f"{base_filename}_p.pv"),
                        f0_sequence, fmt="%.6f")
                        
         except Exception as e:

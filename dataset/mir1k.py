@@ -35,7 +35,7 @@ def process_dataset(args):
             out_wav_name = filename.replace('.wav', '_m.wav')
             sf.write(os.path.join(split_out_dir, out_wav_name), audio.T, args.sr, 'PCM_24')
 
-            pv_filename = filename.replace('.wav', '.pv')
+            pv_filename = filename.replace('.wav', '_m.pv')
             pv_in_path = os.path.join(args.pitch_dir, pv_filename)
             
             if os.path.exists(pv_in_path):

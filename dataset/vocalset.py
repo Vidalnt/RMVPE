@@ -87,7 +87,7 @@ def process_dataset(args):
             out_split_dir = out_root / split
             out_split_dir.mkdir(parents=True, exist_ok=True)
             
-            np.savetxt(out_split_dir / (filename_base + '.pv'), f0_frames, fmt="%.6f")
+            np.savetxt(out_split_dir / (filename_base + '_p.pv'), f0_frames, fmt="%.6f")
             sf.write(out_split_dir / (filename_base + '_p.wav'), audio.T, args.sr, 'PCM_24')
 
         except Exception as e:

@@ -42,7 +42,7 @@ def process_dataset(args):
                 f0_hz = np.loadtxt(f0_path_in, usecols=(0,))
                 f0_hz[f0_hz < 0] = 0.0
                 
-                pv_out_path = os.path.join(split_out_dir, f"{out_filename_base}.pv")
+                pv_out_path = os.path.join(split_out_dir, f"{out_filename_base}_p.pv")
                 np.savetxt(pv_out_path, f0_hz, fmt="%.9f")
         
         except Exception as e:
