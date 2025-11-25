@@ -35,7 +35,7 @@ def process_dataset(args):
             out_wav_name = filename.replace('.wav', '_m.wav')
             sf.write(os.path.join(split_out_dir, out_wav_name), audio.T, args.sr, 'PCM_24')
 
-            pv_filename = filename.replace('.wav', '_m.pv')
+            pv_filename = filename.replace('.wav', '.pv')
             pv_in_path = os.path.join(args.pitch_dir, pv_filename)
             
             if os.path.exists(pv_in_path):
@@ -44,7 +44,7 @@ def process_dataset(args):
                 new_times = np.arange(0.020, old_times[-1] + 0.01, 0.01)
                 f0_interp = np.interp(new_times, old_times, f0)
                 f0_interp[np.isnan(f0_interp)] = 0.0
-                np.savetxt(os.path.join(split_out_dir, pv_filename), f0_interp, fmt="%.6f")
+                np.savetxt(os.path.join(split_out_dir, pv_filename.replace('.pv', '_m.pv')), f0_interp, fmt="%.6f")
                 
         except Exception as e:
             print(f"Error processing {filename}: {e}")
