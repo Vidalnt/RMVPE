@@ -46,7 +46,7 @@ def train():
     writer = SummaryWriter(logdir)
     
     model = E2E0(4, 1, (2, 2)).to(device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = StepLR(optimizer, step_size=learning_rate_decay_steps, gamma=learning_rate_decay_rate)
 
     best_rpa = 0.0
