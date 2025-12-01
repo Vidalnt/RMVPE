@@ -27,21 +27,6 @@ class MIR1K(Dataset):
             for input_files in tqdm(self.files(group), desc='Loading group %s' % group):
                 self.load(*input_files)
 
-    def _generate_natural_silence(self, length, noise_level='low'):
-        silence = cn.powerlaw_psd_gaussian(1, length)
-        
-        noise_levels = {
-            'low': -60,
-            'medium': -50,
-            'high': -40
-        }
-        
-        db_level = noise_levels.get(noise_level, -60)
-        amplitude = 10 ** (db_level / 20)
-        
-        silence = torch.from_numpy(silence).float() * amplitude
-        return silence
-    
     def __getitem__(self, index):
         audio_path = self.paths[index]
         data_buffer = self.data_buffer[audio_path]
@@ -53,21 +38,10 @@ class MIR1K(Dataset):
             pad_n = min_n - n
             pad_s = pad_n * self.HOP_LENGTH
             
-            natural_silence = self._generate_natural_silence(pad_s)
-            
-            audio = torch.cat([
-                data_buffer['audio'][:-WINDOW_LENGTH],
-                natural_silence,
-                torch.zeros(WINDOW_LENGTH)
-            ])
+            audio = torch.nn.functional.pad(data_buffer['audio'][:-WINDOW_LENGTH], (0, pad_s + WINDOW_LENGTH), mode='constant')
             
             if data_buffer['noise'] is not None:
-                noise_silence = self._generate_natural_silence(pad_s, noise_level='medium')
-                noise = torch.cat([
-                    data_buffer['noise'][:-WINDOW_LENGTH],
-                    noise_silence,
-                    torch.zeros(WINDOW_LENGTH)
-                ])
+                noise = torch.nn.functional.pad(data_buffer['noise'][:-WINDOW_LENGTH], (0, pad_s + WINDOW_LENGTH), mode='constant')
             else:
                 noise = None
                 
