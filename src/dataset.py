@@ -31,8 +31,31 @@ class MIR1K(Dataset):
         audio_path = self.paths[index]
         data_buffer = self.data_buffer[audio_path]
         
-        start_frame = 0 if self.whole_audio else random.randint(1, data_buffer['len'] - 128)
-        end_frame = data_buffer['len'] if self.whole_audio else start_frame + 128
+        n = data_buffer['len']
+        min_n = 129
+        
+        if n < min_n:
+            pad_n = min_n - n
+            pad_s = pad_n * self.HOP_LENGTH
+            
+            audio = torch.nn.functional.pad(data_buffer['audio'][:-WINDOW_LENGTH], (0, pad_s + WINDOW_LENGTH), mode='constant')
+            
+            if data_buffer['noise'] is not None:
+                noise = torch.nn.functional.pad(data_buffer['noise'][:-WINDOW_LENGTH], (0, pad_s + WINDOW_LENGTH), mode='constant')
+            else:
+                noise = None
+                
+            cent = torch.nn.functional.pad(data_buffer['cent'], (0, pad_n), mode='constant')
+            voice = torch.nn.functional.pad(data_buffer['voice'], (0, pad_n), mode='constant')
+            n = min_n 
+        else:
+            audio = data_buffer['audio']
+            noise = data_buffer['noise']
+            cent = data_buffer['cent']
+            voice = data_buffer['voice']
+        
+        start_frame = 0 if self.whole_audio else random.randint(1, n - 128)
+        end_frame = n if self.whole_audio else start_frame + 128
         
         if self.use_aug:
             key_shift = random.uniform(0, 5)
@@ -43,32 +66,32 @@ class MIR1K(Dataset):
         start_id = WINDOW_LENGTH + start_frame * self.HOP_LENGTH - win_length_new // 2
         end_id = WINDOW_LENGTH + (end_frame - 1) * self.HOP_LENGTH + (win_length_new + 1) // 2
         
-        audio = data_buffer['audio'][start_id : end_id]
+        aud = audio[start_id : end_id]
         if self.use_aug:
-            if data_buffer['noise'] is None:
-                noise = cn.powerlaw_psd_gaussian(random.uniform(0, 2), len(audio))
-                noise = torch.from_numpy(noise).float() * (10 ** random.uniform(-6, -1))
+            if noise is None:
+                noi = cn.powerlaw_psd_gaussian(random.uniform(0, 2), len(aud))
+                noi = torch.from_numpy(noi).float() * (10 ** random.uniform(-6, -1))
             else:
-                noise = random.uniform(-1, 1) * data_buffer['noise'][start_id : end_id]
-            audio_aug = audio + noise
+                noi = random.uniform(-1, 1) * noise[start_id : end_id]
+            audio_aug = aud + noi
             max_amp = float(torch.max(torch.abs(audio_aug))) + 1e-5
             max_shift = min(1, np.log10(1 / max_amp))
             log10_vol_shift = random.uniform(-1, max_shift)
             audio_aug = audio_aug * (10 ** log10_vol_shift)
         else:
-            if data_buffer['noise'] is None:
-                noise = 0
+            if noise is None:
+                noi = 0
             else:
-                noise = data_buffer['noise'][start_id : end_id]
-            audio_aug = audio + noise
+                noi = noise[start_id : end_id]
+            audio_aug = aud + noi
             
         mel = self.mel(audio_aug.unsqueeze(0), keyshift = key_shift, center=False).squeeze(0)
-        cent = data_buffer['cent'][start_frame : end_frame] + 1200 * np.log2(win_length_new / WINDOW_LENGTH)
-        voice = data_buffer['voice'][start_frame : end_frame]
+        c = cent[start_frame : end_frame] + 1200 * np.log2(win_length_new / WINDOW_LENGTH)
+        v = voice[start_frame : end_frame]
         
-        index = (cent - CONST) / 20
+        index = (c - CONST) / 20
         pitch_label = torch.exp(-(torch.arange(N_CLASS).expand(end_frame - start_frame, -1) - index.unsqueeze(-1)) ** 2 / 2 / 1.25 ** 2)
-        pitch_label = pitch_label * voice.unsqueeze(-1)
+        pitch_label = pitch_label * v.unsqueeze(-1)
         return dict(mel=mel, pitch=pitch_label, file=audio_path)
 
     def __len__(self):
@@ -97,16 +120,7 @@ class MIR1K(Dataset):
             audio = wav
 
         n_frames = len(audio) // self.HOP_LENGTH + 1
-        min_frames = 129
         
-        if n_frames < min_frames:
-            missing_frames = min_frames - n_frames
-            missing_samples = missing_frames * self.HOP_LENGTH
-            audio = np.pad(audio, (0, missing_samples), mode='constant')
-            if noise is not None:
-                noise = np.pad(noise, (0, missing_samples), mode='constant')
-            n_frames = min_frames
-
         audio = np.pad(audio, (WINDOW_LENGTH, WINDOW_LENGTH), mode='reflect')
         audio = torch.from_numpy(audio).float()
         
