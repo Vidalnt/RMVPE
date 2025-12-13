@@ -7,17 +7,25 @@ from .seq import BiGRU
 
 
 class E2E0(nn.Module):
-    def __init__(self, n_blocks, n_gru, kernel_size, en_de_layers=5, inter_layers=4, in_channels=1,
-                 en_out_channels=16):
+    def __init__(
+        self,
+        n_blocks,
+        n_gru,
+        kernel_size,
+        en_de_layers=5,
+        inter_layers=4,
+        in_channels=1,
+        en_out_channels=16,
+    ):
         super(E2E0, self).__init__()
         self.unet = DeepUnet(
-            in_channels=in_channels, 
+            in_channels=in_channels,
             en_out_channels=en_out_channels,
-            base_channels=64,
+            base_channels=32,
             hyperace_k=2,
             hyperace_l=1,
             num_hyperedges=16,
-            num_heads=4
+            num_heads=4,
         )
         self.cnn = nn.Conv2d(en_out_channels, 3, (3, 3), padding=(1, 1))
         if n_gru:
@@ -25,13 +33,11 @@ class E2E0(nn.Module):
                 BiGRU(3 * N_MELS, 256, n_gru),
                 nn.Linear(512, N_CLASS),
                 nn.Dropout(0.25),
-                nn.Sigmoid()
+                nn.Sigmoid(),
             )
         else:
             self.fc = nn.Sequential(
-                nn.Linear(3 * N_MELS, N_CLASS),
-                nn.Dropout(0.25),
-                nn.Sigmoid()
+                nn.Linear(3 * N_MELS, N_CLASS), nn.Dropout(0.25), nn.Sigmoid()
             )
 
     def forward(self, mel):
