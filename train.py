@@ -105,14 +105,14 @@ def train():
     RPA, RCA, OA, VFA, VR, it = 0, 0, 0, 0, 0, 0
 
     for i, data in zip(loop, cycle(data_loader)):
-        if i <= warmup_steps:
-            warmup_factor = float(i) / float(warmup_steps)
-            warmup_factor = max(warmup_factor, 1e-6)
-            
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = learning_rate * warmup_factor
         mel = data['mel'].to(device)
         pitch_label = data['pitch'].to(device)
+        # if i <= warmup_steps:
+        #     warmup_factor = float(i) / float(warmup_steps)
+        #     warmup_factor = max(warmup_factor, 1e-6)
+
+        #     for param_group in optimizer.param_groups:
+        #         param_group["lr"] = learning_rate * warmup_factor
         pitch_pred = model(mel)
         loss = bce(pitch_pred, pitch_label)
 
