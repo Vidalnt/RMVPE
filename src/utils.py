@@ -32,7 +32,7 @@ def summary(model, file=sys.stdout):
 
         for name, p in model._parameters.items():
             if hasattr(p, 'shape'):
-                total_params += reduce(lambda x, y: x * y, p.shape)
+                total_params += reduce(lambda x, y: x * y, p.shape, 1)
 
         main_str = model._get_name() + '('
         if lines:
