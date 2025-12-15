@@ -21,11 +21,11 @@ class E2E0(nn.Module):
         self.unet = DeepUnet(
             in_channels=in_channels,
             en_out_channels=en_out_channels,
-            base_channels=32,
+            base_channels=64,
             hyperace_k=2,
             hyperace_l=1,
             num_hyperedges=16,
-            num_heads=4,
+            num_heads=8,
         )
         self.cnn = nn.Conv2d(en_out_channels, 3, (3, 3), padding=(1, 1))
         if n_gru:
