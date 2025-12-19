@@ -26,6 +26,8 @@ TRAIN_SINGERS = [
     "m11",
 ]
 
+MIN_FRAMES = 129
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -99,6 +101,15 @@ def process_dataset(args):
             f0_frames = process_f0_vocalset(
                 df_frame["Time (second)"].values, df_frame["F0"].values, duration
             )
+
+            current_frames = len(f0_frames)
+            if current_frames < MIN_FRAMES:
+                repeats = int(np.ceil(MIN_FRAMES / current_frames))
+                f0_frames = np.tile(f0_frames, repeats)
+                if audio.ndim > 1:
+                    audio = np.tile(audio, (1, repeats))
+                else:
+                    audio = np.tile(audio, repeats)
 
             out_split_dir = out_root / split
             out_split_dir.mkdir(parents=True, exist_ok=True)
