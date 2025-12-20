@@ -41,15 +41,15 @@ def evaluate_pitch_smoothness(pitch_pred, pred_voicing, true_voicing):
         )
         continuity_breaks = breaks / total if total > 0 else np.nan
     return {
-        'relative_smoothness': float(relative_smoothness),
-        'continuity_breaks': float(continuity_breaks),
+        "relative_smoothness": float(relative_smoothness),
+        "continuity_breaks": float(continuity_breaks),
     }
 
 
 def process_in_chunks(mel, model, device, chunk_size=32000):
     n_frames = mel.shape[-1]
     mel_padded = F.pad(
-        mel, (0, 32 * ((n_frames - 1) // 32 + 1) - n_frames), mode='reflect'
+        mel, (0, 32 * ((n_frames - 1) // 32 + 1) - n_frames), mode="reflect"
     )
     output_chunks = []
     with torch.no_grad():
@@ -66,7 +66,7 @@ def evaluate(dataset, model, hop_length, device, pitch_th=0.03):
 
     def calculate_metrics(pitch_p, pitch_l, file_name):
         loss = bce(pitch_p, pitch_l)
-        metrics['loss'].append(loss.item())
+        metrics["loss"].append(loss.item())
         c_pred = to_local_average_cents(pitch_p.cpu().numpy(), None, pitch_th)
         c_true = to_local_average_cents(pitch_l.cpu().numpy(), None, pitch_th)
 
@@ -75,30 +75,30 @@ def evaluate(dataset, model, hop_length, device, pitch_th=0.03):
         t = np.array([i * hop_length * 1000 / SAMPLE_RATE for i in range(len(c_true))])
 
         rv, rc, ev, ec = to_cent_voicing(t, f_true, t, f_pred)
-        metrics['RPA'].append(raw_pitch_accuracy(rv, rc, ev, ec))
-        metrics['RCA'].append(raw_chroma_accuracy(rv, rc, ev, ec))
-        metrics['OA'].append(overall_accuracy(rv, rc, ev, ec))
-        metrics['VFA'].append(voicing_false_alarm(rv, ev))
-        metrics['VR'].append(voicing_recall(rv, ev))
+        metrics["RPA"].append(raw_pitch_accuracy(rv, rc, ev, ec))
+        metrics["RCA"].append(raw_chroma_accuracy(rv, rc, ev, ec))
+        metrics["OA"].append(overall_accuracy(rv, rc, ev, ec))
+        metrics["VFA"].append(voicing_false_alarm(rv, ev))
+        metrics["VR"].append(voicing_recall(rv, ev))
 
         sm = evaluate_pitch_smoothness(f_pred, f_pred > 0, f_true > 0)
-        metrics['SMOOTH'].append(sm['relative_smoothness'])
-        metrics['BREAKS'].append(sm['continuity_breaks'])
+        metrics["SMOOTH"].append(sm["relative_smoothness"])
+        metrics["BREAKS"].append(sm["continuity_breaks"])
         print(
-            f'{file_name} :\t RPA: {metrics['RPA'][-1]:.4f} \t OA: {metrics['OA'][-1]:.4f}'
+            f"{file_name} :\t RPA: {metrics['RPA'][-1]:.4f} \t OA: {metrics['OA'][-1]:.4f}"
         )
 
     for data in dataset:
         try:
-            mel, pitch_label = data['mel'].to(device), data['pitch'].to(device)
+            mel, pitch_label = data["mel"].to(device), data["pitch"].to(device)
             try:
                 n = mel.shape[-1]
-                mel_p = F.pad(mel, (0, 32 * ((n - 1) // 32 + 1) - n), mode='reflect')
+                mel_p = F.pad(mel, (0, 32 * ((n - 1) // 32 + 1) - n), mode="reflect")
                 pitch_pred = model(mel_p.unsqueeze(0)).squeeze(0)[
                     : pitch_label.shape[0]
                 ]
             except RuntimeError as e:
-                if 'out of memory' in str(e):
+                if "out of memory" in str(e):
                     torch.cuda.empty_cache()
                     gc.collect()
                     pitch_pred = process_in_chunks(mel, model, device)
@@ -106,7 +106,7 @@ def evaluate(dataset, model, hop_length, device, pitch_th=0.03):
                 else:
                     raise e
 
-            calculate_metrics(pitch_pred, pitch_label, data['file'])
+            calculate_metrics(pitch_pred, pitch_label, data["file"])
             del mel, pitch_pred, pitch_label
         except Exception:
             torch.cuda.empty_cache()

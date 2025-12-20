@@ -5,6 +5,7 @@ import argparse
 import torch
 from src import RMVPE
 
+
 def parse_args(args=None, namespace=None):
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -20,7 +21,8 @@ def parse_args(args=None, namespace=None):
         type=str,
         default=None,
         required=False,
-        help="cpu or cuda, auto if not set")
+        help="cpu or cuda, auto if not set",
+    )
     parser.add_argument(
         "-i",
         "--input",
@@ -53,9 +55,10 @@ def parse_args(args=None, namespace=None):
     )
     return parser.parse_args(args=args, namespace=namespace)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     cmd = parse_args()
-    
+
     model_path = cmd.model
     device = cmd.device
     audio_path = cmd.input
@@ -64,15 +67,21 @@ if __name__ == '__main__':
     thred = float(cmd.threhold)
 
     if device is None:
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    
-    print('loading model and audio')
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    print("loading model and audio")
     rmvpe = RMVPE(model_path, hop_length=hop_length)
     audio, sr = librosa.load(audio_path, sr=None)
-    print('start infering ...')
+    print("start infering ...")
     t = time.time()
-    f0 = rmvpe.infer_from_audio(audio, sr, device=device, thred=thred, use_viterbi=False)
+    f0 = rmvpe.infer_from_audio(
+        audio, sr, device=device, thred=thred, use_viterbi=False
+    )
     infer_time = time.time() - t
-    print('time: ', infer_time)
-    print('RTF: ', infer_time * sr / len(audio))
-    np.savetxt(output_path, np.array([0.01 * np.arange(len(f0)), f0]).transpose(),delimiter=',')
+    print("time: ", infer_time)
+    print("RTF: ", infer_time * sr / len(audio))
+    np.savetxt(
+        output_path,
+        np.array([0.01 * np.arange(len(f0)), f0]).transpose(),
+        delimiter=",",
+    )

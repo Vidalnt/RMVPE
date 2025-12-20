@@ -18,12 +18,12 @@ def find_latest_iteration(logdir):
         return None
 
     model_files = [
-        f for f in os.listdir(logdir) if f.startswith('model_') and f.endswith('.pt')
+        f for f in os.listdir(logdir) if f.startswith("model_") and f.endswith(".pt")
     ]
 
     iterations = []
     for f in model_files:
-        match = re.search(r'model_(\d+)\.pt', f)
+        match = re.search(r"model_(\d+)\.pt", f)
         if match:
             iterations.append(int(match.group(1)))
 
@@ -31,22 +31,22 @@ def find_latest_iteration(logdir):
 
 
 def train():
-    logdir = 'runs/Hybrid_bce'
+    logdir = "runs/Hybrid_bce"
 
     hop_length = 160
-    optimizer_type = 'adam'
+    optimizer_type = "adam"
     learning_rate = 5e-4
     batch_size = 16
     validation_interval = 2000
     clip_grad_norm = 3
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     only_latest = False
 
     train_dataset = MIR1K(
-        'Hybrid', hop_length, ['train'], whole_audio=False, use_aug=True
+        "Hybrid", hop_length, ["train"], whole_audio=False, use_aug=True
     )
     validation_dataset = MIR1K(
-        'Hybrid', hop_length, ['test'], whole_audio=True, use_aug=False
+        "Hybrid", hop_length, ["test"], whole_audio=True, use_aug=False
     )
 
     data_loader = DataLoader(
@@ -66,15 +66,15 @@ def train():
 
     resume_path = None
     if only_latest:
-        potential_path = os.path.join(logdir, 'model_latest.pt')
+        potential_path = os.path.join(logdir, "model_latest.pt")
         if os.path.exists(potential_path):
             resume_path = potential_path
     else:
         latest_iter = find_latest_iteration(logdir)
         if latest_iter is not None:
-            resume_path = os.path.join(logdir, f'model_{latest_iter}.pt')
-        elif os.path.exists(os.path.join(logdir, 'model_latest.pt')):
-            resume_path = os.path.join(logdir, 'model_latest.pt')
+            resume_path = os.path.join(logdir, f"model_{latest_iter}.pt")
+        elif os.path.exists(os.path.join(logdir, "model_latest.pt")):
+            resume_path = os.path.join(logdir, "model_latest.pt")
 
     if resume_path and os.path.exists(resume_path):
         should_resume = True
@@ -86,7 +86,7 @@ def train():
     writer = SummaryWriter(logdir)
 
     model = E2E0(4, 1, (2, 2)).to(device)
-    if optimizer_type == 'adamw':
+    if optimizer_type == "adamw":
         optimizer = torch.optim.AdamW(
             model.parameters(), lr=learning_rate, betas=(0.9, 0.999), eps=1e-8
         )
@@ -99,25 +99,25 @@ def train():
     best_rpa = 0.0
 
     if should_resume:
-        print(f'Resuming from {resume_path}')
+        print(f"Resuming from {resume_path}")
         ckpt = torch.load(
             resume_path, map_location=torch.device(device), weights_only=False
         )
-        model.load_state_dict(ckpt['model'])
+        model.load_state_dict(ckpt["model"])
 
-        if 'optimizer' in ckpt:
+        if "optimizer" in ckpt:
             try:
-                optimizer.load_state_dict(ckpt['optimizer'])
+                optimizer.load_state_dict(ckpt["optimizer"])
             except:
                 pass
-        if 'scheduler' in ckpt:
+        if "scheduler" in ckpt:
             try:
-                scheduler.load_state_dict(ckpt['scheduler'])
+                scheduler.load_state_dict(ckpt["scheduler"])
             except:
                 pass
 
-        resume_iteration = ckpt.get('iteration', 0)
-        best_rpa = ckpt.get('best_rpa', 0.0)
+        resume_iteration = ckpt.get("iteration", 0)
+        best_rpa = ckpt.get("best_rpa", 0.0)
 
     summary(model)
 
@@ -125,13 +125,13 @@ def train():
     RPA, RCA, OA, VFA, VR, SMOOTH, BREAKS, it = 0, 0, 0, 0, 0, 0, 0, 0
 
     for i, data in zip(loop, cycle(data_loader)):
-        mel = data['mel'].to(device)
-        pitch_label = data['pitch'].to(device)
+        mel = data["mel"].to(device)
+        pitch_label = data["pitch"].to(device)
 
         pitch_pred = model(mel)
         loss = bce(pitch_pred, pitch_label)
 
-        loop.set_description(f'Iter {i}')
+        loop.set_description(f"Iter {i}")
         loop.set_postfix(loss_total=loss.item())
 
         optimizer.zero_grad()
@@ -141,7 +141,7 @@ def train():
         optimizer.step()
         if i > warmup_steps:
             scheduler.step()
-        writer.add_scalar('loss/loss_pitch', loss.item(), global_step=i)
+        writer.add_scalar("loss/loss_pitch", loss.item(), global_step=i)
 
         if i % validation_interval == 0:
             model.eval()
@@ -150,16 +150,16 @@ def train():
 
                 for key, value in metrics.items():
                     writer.add_scalar(
-                        'stage_pitch/' + key, np.nanmean(value), global_step=i
+                        "stage_pitch/" + key, np.nanmean(value), global_step=i
                     )
 
-                rpa = np.nanmean(metrics['RPA'])
-                rca = np.nanmean(metrics['RCA'])
-                oa = np.nanmean(metrics['OA'])
-                vr = np.nanmean(metrics['VR'])
-                vfa = np.nanmean(metrics['VFA'])
-                smooth = np.nanmean(metrics['SMOOTH'])
-                breaks = np.nanmean(metrics['BREAKS'])
+                rpa = np.nanmean(metrics["RPA"])
+                rca = np.nanmean(metrics["RCA"])
+                oa = np.nanmean(metrics["OA"])
+                vr = np.nanmean(metrics["VR"])
+                vfa = np.nanmean(metrics["VFA"])
+                smooth = np.nanmean(metrics["SMOOTH"])
+                breaks = np.nanmean(metrics["BREAKS"])
 
                 RPA, RCA, OA, VR, VFA, SMOOTH, BREAKS, it = (
                     rpa,
@@ -172,42 +172,42 @@ def train():
                     i,
                 )
 
-                with open(os.path.join(logdir, 'result.txt'), 'a') as f:
+                with open(os.path.join(logdir, "result.txt"), "a") as f:
                     f.write(
-                        f'{i}\t{RPA:.4f}\t{RCA:.4f}\t{OA:.4f}\t{VR:.4f}\t{VFA:.4f}\t{SMOOTH:.4f}\t{BREAKS:.4f}\n'
+                        f"{i}\t{RPA:.4f}\t{RCA:.4f}\t{OA:.4f}\t{VR:.4f}\t{VFA:.4f}\t{SMOOTH:.4f}\t{BREAKS:.4f}\n"
                     )
 
                 is_best = False
                 if rpa >= best_rpa:
                     best_rpa = rpa
                     is_best = True
-                    print(f'New best model at {i} (RPA: {rpa:.4f})!')
+                    print(f"New best model at {i} (RPA: {rpa:.4f})!")
 
                 checkpoint_dict = {
-                    'iteration': i,
-                    'model': model.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'scheduler': scheduler.state_dict(),
-                    'best_rpa': best_rpa,
+                    "iteration": i,
+                    "model": model.state_dict(),
+                    "optimizer": optimizer.state_dict(),
+                    "scheduler": scheduler.state_dict(),
+                    "best_rpa": best_rpa,
                 }
 
                 if is_best:
-                    torch.save(checkpoint_dict, os.path.join(logdir, 'model_best.pt'))
+                    torch.save(checkpoint_dict, os.path.join(logdir, "model_best.pt"))
 
-                model_filename = 'model_latest.pt' if only_latest else f'model_{i}.pt'
+                model_filename = "model_latest.pt" if only_latest else f"model_{i}.pt"
                 torch.save(checkpoint_dict, os.path.join(logdir, model_filename))
 
             model.train()
 
-    print('Training finished.')
+    print("Training finished.")
     writer.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         train()
     except KeyboardInterrupt:
-        print('Interrupted by user.')
+        print("Interrupted by user.")
     finally:
-        print('Exiting...')
+        print("Exiting...")
         sys.exit(0)

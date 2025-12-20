@@ -27,4 +27,3 @@ def FL(inputs, targets, alpha, gamma):
     weight_gamma = (1 - pt) ** gamma
     F_loss = torch.mean(weight_gamma * loss_w)
     return F_loss
-
