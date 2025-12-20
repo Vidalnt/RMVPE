@@ -49,8 +49,13 @@ def process_dataset():
 
     audio_dir = os.path.join(args.wav_dir, "audio_stems")
     anno_dir = os.path.join(args.wav_dir, "annotation_stems")
-
-    all_files = sorted([f for f in os.listdir(audio_dir) if f.endswith(".wav")])
+    all_files = sorted(
+        [
+            f
+            for f in os.listdir(audio_dir)
+            if f.endswith(".wav") and not f.startswith("._")
+        ]
+    )
     total_files = len(all_files)
 
     if total_files == 0:
