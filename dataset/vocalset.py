@@ -63,7 +63,7 @@ def process_f0_vocalset(time_sec, f0_values, duration):
     f0_interp = np.nan_to_num(f0_interp, nan=0.0)
     f0_interp[f0_interp < 0] = 0.0
 
-    return f0_interp.astype(np.float32)
+    return f0_interp
 
 
 def process_dataset(args):

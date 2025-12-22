@@ -1,13 +1,17 @@
-import os
 import argparse
-import pandas as pd
-from tqdm import tqdm
-import librosa
-import soundfile as sf
-import numpy as np
-import parselmouth
 import math
+import os
 import warnings
+
+import librosa
+import numpy as np
+import pandas as pd
+import parselmouth
+import soundfile as sf
+from scipy.interpolate import interp1d
+from tqdm import tqdm
+
+warnings.filterwarnings("ignore")
 
 
 def parse_args():
@@ -21,27 +25,41 @@ def parse_args():
     return parser.parse_args()
 
 
-def extract_f0_parselmouth(audio_np, sr, hop_length, f0_min, f0_max):
-    mel_len = int(math.ceil(len(audio_np) / hop_length))
+def extract_f0_interpolated(audio_np, sr, hop_length, f0_min, f0_max):
     time_step = hop_length / sr
 
     snd = parselmouth.Sound(audio_np, sampling_frequency=sr)
+    pitch = snd.to_pitch_ac(
+        time_step=time_step,
+        voicing_threshold=0.6,
+        pitch_floor=f0_min,
+        pitch_ceiling=f0_max,
+    )
 
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        pitch = snd.to_pitch(
-            time_step=time_step, pitch_floor=f0_min, pitch_ceiling=f0_max
-        )
+    pitch_values = pitch.selected_array["frequency"]
+    pitch_times = pitch.xs()
 
-    f0 = pitch.selected_array["frequency"]
+    mel_len = int(math.ceil(len(audio_np) / hop_length))
+    target_times = librosa.frames_to_time(
+        np.arange(mel_len), sr=sr, hop_length=hop_length
+    )
 
-    delta_l = mel_len - len(f0)
-    if delta_l > 0:
-        f0 = np.concatenate([f0, [f0[-1]] * delta_l], 0)
-    f0 = f0[:mel_len]
-    f0[np.isnan(f0)] = 0.0
+    f_pitch = interp1d(
+        pitch_times, pitch_values, kind="linear", bounds_error=False, fill_value=0.0
+    )
+    f0_interp = f_pitch(target_times)
 
-    return f0
+    is_voiced = (pitch_values > 0).astype(float)
+    f_mask = interp1d(
+        pitch_times, is_voiced, kind="nearest", bounds_error=False, fill_value=0.0
+    )
+    mask_interp = f_mask(target_times)
+
+    f0_interp[mask_interp == 0] = 0.0
+    f0_interp = np.nan_to_num(f0_interp, nan=0.0)
+    f0_interp[f0_interp < 0] = 0.0
+
+    return f0_interp
 
 
 def process_dataset(args):
@@ -77,10 +95,9 @@ def process_dataset(args):
             else:
                 audio_mono = audio
 
-            f0_sequence = extract_f0_parselmouth(
+            f0_sequence = extract_f0_interpolated(
                 audio_mono, args.sr, 160, args.f0_min, args.f0_max
             )
-            f0_sequence[f0_sequence < 0] = 0.0
 
             np.savetxt(
                 os.path.join(split_out_dir, f"{base_filename}.pv"),
