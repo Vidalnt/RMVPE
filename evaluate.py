@@ -13,6 +13,25 @@ from mir_eval.melody import (
 from mir_eval.melody import voicing_recall, voicing_false_alarm
 import torch.nn.functional as F
 import gc
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pylab as plt
+
+
+def plot_f0_compared(f0, cleanf0, title="F0 Comparison"):
+    f0 = np.array(f0)
+    cleanf0 = np.array(cleanf0)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(f0, label="hat")
+    ax.plot(cleanf0, label="gt")
+    ax.set_ylim(0, None)
+    ax.set_xlim(0, 500)
+    ax.set_title(title)
+    ax.legend()
+    fig.canvas.draw()
+    plt.close(fig)
+    return fig
 
 
 def evaluate_pitch_smoothness(pitch_pred, pred_voicing, true_voicing):
@@ -63,6 +82,7 @@ def process_in_chunks(mel, model, device, chunk_size=32000):
 
 def evaluate(dataset, model, hop_length, device, pitch_th=0.03):
     metrics = defaultdict(list)
+    figures = []
 
     def calculate_metrics(pitch_p, pitch_l, file_name):
         loss = bce(pitch_p, pitch_l)
@@ -84,6 +104,11 @@ def evaluate(dataset, model, hop_length, device, pitch_th=0.03):
         sm = evaluate_pitch_smoothness(f_pred, f_pred > 0, f_true > 0)
         metrics["SMOOTH"].append(sm["relative_smoothness"])
         metrics["BREAKS"].append(sm["continuity_breaks"])
+
+        if len(figures) < 6:
+            fig = plot_f0_compared(f_pred, f_true, title=file_name)
+            figures.append((file_name, fig))
+
         print(
             f"{file_name} :\t RPA: {metrics['RPA'][-1]:.4f} \t OA: {metrics['OA'][-1]:.4f}"
         )
@@ -111,4 +136,4 @@ def evaluate(dataset, model, hop_length, device, pitch_th=0.03):
         except Exception:
             torch.cuda.empty_cache()
             continue
-    return metrics
+    return metrics, figures

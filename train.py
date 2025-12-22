@@ -147,12 +147,17 @@ def train():
         if i % validation_interval == 0:
             model.eval()
             with torch.no_grad():
-                metrics = evaluate(validation_dataset, model, hop_length, device)
+                metrics, figures = evaluate(
+                    validation_dataset, model, hop_length, device
+                )
 
                 for key, value in metrics.items():
                     writer.add_scalar(
                         "stage_pitch/" + key, np.nanmean(value), global_step=i
                     )
+
+                for file_name, fig in figures:
+                    writer.add_figure(f"plots/{file_name}", fig, global_step=i)
 
                 rpa = np.nanmean(metrics["RPA"])
                 rca = np.nanmean(metrics["RCA"])
