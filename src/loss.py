@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 def smoothl1(inputs, targets, alpha=None):
-    loss_f = nn.SmoothL1Loss(reduce=False)
+    loss_f = nn.SmoothL1Loss(reduction="none")
     weight = torch.ones(inputs.shape, dtype=torch.float).to(inputs.device)
     if alpha is not None:
         weight[targets != 0] = float(alpha)
@@ -19,10 +19,10 @@ def bce(inputs, targets):
 
 
 def FL(inputs, targets, alpha, gamma, weight_t=None):
-    loss = F.binary_cross_entropy(inputs, targets, reduce=False)
+    loss = F.binary_cross_entropy(inputs, targets, reduction="none")
     weight = torch.ones(inputs.shape, dtype=torch.float).to(inputs.device)
     weight[targets == 1] = float(alpha)
-    loss_w = F.binary_cross_entropy(inputs, targets, weight=weight, reduce=False)
+    loss_w = F.binary_cross_entropy(inputs, targets, weight=weight, reduction="none")
     pt = torch.exp(-loss)
     weight_gamma = (1 - pt) ** gamma
     if weight_t is not None:
