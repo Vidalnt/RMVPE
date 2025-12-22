@@ -32,13 +32,13 @@ def process_dataset(args):
         os.makedirs(split_out_dir, exist_ok=True)
 
         try:
-            audio_p, _ = librosa.load(wav_path_in, sr=args.sr, mono=False)
+            audio, _ = librosa.load(wav_path_in, sr=args.sr, mono=False)
 
             out_filename_base = os.path.splitext(os.path.basename(filename))[0]
 
             sf.write(
-                os.path.join(split_out_dir, f"{out_filename_base}_p.wav"),
-                audio_p.T,
+                os.path.join(split_out_dir, f"{out_filename_base}.wav"),
+                audio.T,
                 args.sr,
                 "PCM_24",
             )
@@ -48,7 +48,7 @@ def process_dataset(args):
                 f0_hz = np.loadtxt(f0_path_in, usecols=(0,))
                 f0_hz[f0_hz < 0] = 0.0
 
-                pv_out_path = os.path.join(split_out_dir, f"{out_filename_base}_p.pv")
+                pv_out_path = os.path.join(split_out_dir, f"{out_filename_base}.pv")
                 np.savetxt(pv_out_path, f0_hz, fmt="%.9f")
 
         except Exception as e:

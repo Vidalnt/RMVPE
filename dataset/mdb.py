@@ -85,11 +85,11 @@ def process_dataset():
 
                 f0_resampled = process_f0(csv_path, duration)
 
-                out_wav_path = os.path.join(split_out_dir, f"{base_name}_p.wav")
-                out_pv_path = os.path.join(split_out_dir, f"{base_name}_p.pv")
+                out_wav_path = os.path.join(split_out_dir, f"{base_name}.wav")
+                out_pv_path = os.path.join(split_out_dir, f"{base_name}.pv")
 
                 sf.write(out_wav_path, audio, args.sr, subtype="PCM_24")
-                np.savetxt(out_pv_path, f0_resampled, fmt="%.6f")
+                np.savetxt(out_pv_path, f0_resampled, fmt="%.9f")
 
             except Exception as e:
                 print(f"Error {filename}: {e}")

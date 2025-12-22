@@ -1,4 +1,4 @@
-from .dataset import MIR1K, MIR_ST500, MDB
+from .dataset import MIR1K, MIR_ST500, MDB, Hybrid
 from .constants import *
 from .model import E2E0
 from .utils import (

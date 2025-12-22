@@ -18,6 +18,12 @@ def parse_args():
     return parser.parse_args()
 
 
+def midi_to_hz(midi_note):
+    if midi_note <= 0:
+        return 0.0
+    return 440.0 * (2.0 ** ((midi_note - 69.0) / 12.0))
+
+
 def process_dataset(args):
     df_info = pd.read_csv(args.csv_path)
 
@@ -59,22 +65,22 @@ def process_dataset(args):
                     bounds_error=False,
                 )
                 mask_interp = f_mask(new_times)
-
                 f0_interp[mask_interp == 0] = 0.0
                 f0_interp = np.nan_to_num(f0_interp, nan=0.0)
 
-                out_wav_name = filename.replace(".wav", "_m.wav")
+                f0_hz = np.array([midi_to_hz(midi) for midi in f0_interp])
+
                 sf.write(
-                    os.path.join(split_out_dir, out_wav_name),
+                    os.path.join(split_out_dir, filename),
                     audio.T,
                     args.sr,
                     "PCM_24",
                 )
 
                 np.savetxt(
-                    os.path.join(split_out_dir, pv_filename.replace(".pv", "_m.pv")),
-                    f0_interp,
-                    fmt="%.6f",
+                    os.path.join(split_out_dir, pv_filename),
+                    f0_hz,
+                    fmt="%.9f",
                 )
 
         except Exception as e:

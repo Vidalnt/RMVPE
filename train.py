@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 import numpy as np
 import sys
-from src import MIR1K, E2E0, cycle, summary, SAMPLE_RATE, bce
+from src import Hybrid, E2E0, cycle, summary, SAMPLE_RATE, bce, FL
 from evaluate import evaluate
 
 
@@ -42,10 +42,10 @@ def train():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     only_latest = False
 
-    train_dataset = MIR1K(
+    train_dataset = Hybrid(
         "Hybrid", hop_length, ["train"], whole_audio=False, use_aug=True
     )
-    validation_dataset = MIR1K(
+    validation_dataset = Hybrid(
         "Hybrid", hop_length, ["test"], whole_audio=True, use_aug=False
     )
 
@@ -129,6 +129,7 @@ def train():
         pitch_label = data["pitch"].to(device)
 
         pitch_pred = model(mel)
+        # loss = FL(pitch_pred, pitch_label, alpha=10, gamma=0)
         loss = bce(pitch_pred, pitch_label)
 
         loop.set_description(f"Iter {i}")

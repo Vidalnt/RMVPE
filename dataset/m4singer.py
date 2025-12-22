@@ -85,7 +85,7 @@ def process_dataset(args):
             np.savetxt(
                 os.path.join(split_out_dir, f"{base_filename}_p.pv"),
                 f0_sequence,
-                fmt="%.6f",
+                fmt="%.9f",
             )
 
         except Exception as e:
