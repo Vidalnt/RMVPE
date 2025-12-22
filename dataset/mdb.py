@@ -85,6 +85,17 @@ def process_dataset():
 
                 f0_resampled = process_f0(csv_path, duration)
 
+                voiced_indices = np.where(f0_resampled > 0)[0]
+                if len(voiced_indices) > 0:
+                    first_voiced_idx = voiced_indices[0]
+                    first_voiced_time = first_voiced_idx * 0.01
+                    if first_voiced_time > 1.0:
+                        trim_seconds = first_voiced_time - 0.5
+                        trim_samples = int(trim_seconds * args.sr)
+                        trim_frames = int(trim_seconds / 0.01)
+                        audio = audio[trim_samples:]
+                        f0_resampled = f0_resampled[trim_frames:]
+
                 out_wav_path = os.path.join(split_out_dir, f"{base_name}.wav")
                 out_pv_path = os.path.join(split_out_dir, f"{base_name}.pv")
 
