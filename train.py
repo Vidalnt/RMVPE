@@ -61,7 +61,6 @@ def train():
 
     iterations = 200000
     learning_rate_decay_steps = 2000
-    warmup_steps = int(len(data_loader) * 3)
     learning_rate_decay_rate = 0.98
 
     resume_path = None
@@ -140,8 +139,7 @@ def train():
         if clip_grad_norm:
             clip_grad_norm_(model.parameters(), clip_grad_norm)
         optimizer.step()
-        if i > warmup_steps:
-            scheduler.step()
+        scheduler.step()
         writer.add_scalar("loss/loss_pitch", loss.item(), global_step=i)
 
         if i % validation_interval == 0:
