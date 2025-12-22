@@ -66,7 +66,7 @@ def process_dataset(args):
             audio, _ = librosa.load(wav_path_in, sr=args.sr, mono=False)
 
             sf.write(
-                os.path.join(split_out_dir, f"{base_filename}_p.wav"),
+                os.path.join(split_out_dir, f"{base_filename}.wav"),
                 audio.T,
                 args.sr,
                 "PCM_24",
@@ -83,7 +83,7 @@ def process_dataset(args):
             f0_sequence[f0_sequence < 0] = 0.0
 
             np.savetxt(
-                os.path.join(split_out_dir, f"{base_filename}_p.pv"),
+                os.path.join(split_out_dir, f"{base_filename}.pv"),
                 f0_sequence,
                 fmt="%.9f",
             )
